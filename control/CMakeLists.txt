@@ -1,6 +1,6 @@
 add_library(control STATIC
-    src/LQR.cpp
-    src/PID.cpp
+    src/Linear.cpp,
+    src/Simulation.cpp
 )
 
 find_package(Eigen3 REQUIRED)
