@@ -1,5 +1,5 @@
 add_library(control STATIC
-    src/Linear.cpp,
+    src/Linear.cpp
     src/Simulation.cpp
 )
 

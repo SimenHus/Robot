@@ -1,24 +1,28 @@
 #include "Simulation.h"
 
 
-
 using namespace Simulation;
 
+std::vector<Eigen::VectorXd> Simulation::LQR(const std::vector<float> &time, const LinearSystems::LQR &controller, const Eigen::VectorXd &x0, const std::vector<Eigen::VectorXd> &reference) {
+    uint interpolationSteps = 100;
 
-std::vector<Eigen::VectorXd> Simulation::LQR(const LinearSystems::StateSpace &sys, const LinearSystems::CostMatrices &cost,
-    const Eigen::VectorXd &x0, const uint iterations, const float dt) {
-    
-    std::vector<Eigen::VectorXd> result(iterations);
-    result[0] = x0;
+    std::vector<Eigen::VectorXd> result(time.size());
+    result[0] = controller.observe(x0);
 
-    auto [K, P] = LinearSystems::LQR(sys, cost);
-    
-    Eigen::VectorXd x_next;
-    for (int i = 1; i < iterations; i++) {
-        x_next = result[i-1] + (sys.A - sys.B*K)*result[i-1] * dt;
-        result[i] = x_next;
+    Eigen::VectorXd x = x0;
+    Eigen::VectorXd r;
+    Eigen::VectorXd u;
+
+    float dt = (time[1] - time[0]) / interpolationSteps;
+    for (uint i = 1; i < time.size(); i++) {
+        r = reference[i-1];
+        for (uint j = 0; j < interpolationSteps; j++) {
+            u = controller.calculateGain(x, r);
+            x = x + controller.process(x, u)*dt;
+        }
+
+        result[i] = controller.observe(x, u);
     }
-
 
     return result;
 }
