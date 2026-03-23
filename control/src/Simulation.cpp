@@ -3,6 +3,26 @@
 
 using namespace Simulation;
 
+
+
+std::vector<Eigen::VectorXd> Simulation::circularPath(const uint &iterations, const float &radius, const Eigen::VectorXd &start) {
+
+    Eigen::VectorXd offset(2); offset << radius, 0;
+    Eigen::VectorXd circleOrigin = start - offset;
+    std::vector<Eigen::VectorXd> trajectory(iterations);
+    const float dt = 2*3.14 / iterations;
+    for (int i = 0; i < iterations; i++) {
+        double theta = i * dt;  // angle increases over time
+
+        double x = radius * std::cos(theta);
+        double y = radius * std::sin(theta);
+
+        Eigen::VectorXd position(2); position << x, y;
+        trajectory[i] = circleOrigin + position;
+    }
+    return trajectory;
+}
+
 std::vector<Eigen::VectorXd> Simulation::LQR(const std::vector<float> &time, const LinearSystems::LQR &controller, const Eigen::VectorXd &x0, const std::vector<Eigen::VectorXd> &reference) {
     uint interpolationSteps = 100;
 
@@ -22,6 +42,22 @@ std::vector<Eigen::VectorXd> Simulation::LQR(const std::vector<float> &time, con
         }
 
         result[i] = controller.observe(x, u);
+    }
+
+    return result;
+}
+
+
+std::vector<Eigen::VectorXd> Simulation::KalmanFilter(const std::vector<Eigen::VectorXd> &groundTruth, const float &disturbance, LinearSystems::KalmanFilter &filter) {
+
+    std::vector<Eigen::VectorXd> result(groundTruth.size());
+    result[0] = filter.currentState();
+
+    Eigen::VectorXd measurement;
+    for (uint i = 1; i < groundTruth.size(); i++) {
+        measurement = groundTruth[i] + Eigen::VectorXd::Random(groundTruth[i].size()) * disturbance;
+        Eigen::VectorXd prediction = filter.predict();
+        result[i] = filter.update(measurement);
     }
 
     return result;
