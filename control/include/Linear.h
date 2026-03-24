@@ -2,6 +2,7 @@
 #include <unsupported/Eigen/MatrixFunctions>
 #include <Eigen/Dense>
 #include <iostream>
+#include <optional>
 
 namespace LinearSystems {
 
@@ -10,34 +11,23 @@ struct StateSpace {
     Eigen::MatrixXd B;
     Eigen::MatrixXd C;
     Eigen::MatrixXd D;
+    Eigen::MatrixXd Q;
+    Eigen::MatrixXd R;
+    Eigen::MatrixXd G;
 
-    StateSpace(Eigen::MatrixXd A_, Eigen::MatrixXd B_);
-    StateSpace(Eigen::MatrixXd A_, Eigen::MatrixXd B_, Eigen::MatrixXd C_);
-    StateSpace(Eigen::MatrixXd A_, Eigen::MatrixXd B_, Eigen::MatrixXd C_, Eigen::MatrixXd D_);
-
-    inline Eigen::VectorXd process(const Eigen::VectorXd &x, const Eigen::VectorXd &u) const {return A*x + B*u;}
-    inline Eigen::VectorXd observe(const Eigen::VectorXd &x, const Eigen::VectorXd &u) const {return C*x + D*u;}
-    inline Eigen::VectorXd observe(const Eigen::VectorXd &x) const {return C*x;}
-    inline void print() const {std::cout << A << std::endl << B << std::endl << C << std::endl << D << std::endl;}
+    Eigen::VectorXd process(const Eigen::VectorXd &x) const;
+    Eigen::VectorXd measure(const Eigen::VectorXd &x) const;
+    Eigen::VectorXd process(const Eigen::VectorXd &x, const Eigen::VectorXd &u) const;
+    Eigen::VectorXd measure(const Eigen::VectorXd &x, const Eigen::VectorXd &u) const;
+    // inline void print() const {std::cout << A << std::endl << B << std::endl << C << std::endl << D << std::endl;}
 
     StateSpace getDiscrete(const double sampleTime) const;
 };
 
-struct NoiseModel {
-    Eigen::MatrixXd Q;
-    Eigen::MatrixXd R;
-
-    NoiseModel(Eigen::MatrixXd Q_, Eigen::MatrixXd R_) : Q(Q_), R(R_) {}
-    NoiseModel getDiscrete(const double sampleTime, const StateSpace &sys) const;
-    inline void print() const {std::cout << Q << std::endl << R << std::endl;}
-};
-
-
-
-std::pair<Eigen::MatrixXd, Eigen::MatrixXd> CARE(const StateSpace &sys, const NoiseModel &cost,
+std::pair<Eigen::MatrixXd, Eigen::MatrixXd> CARE(const StateSpace &sys,
     const float tolerance = 1e-5, const uint iterations = 1e5, float dt = 1e-3);
 
-std::pair<Eigen::MatrixXd, Eigen::MatrixXd> DARE(const StateSpace &sys, const NoiseModel &cost,
+std::pair<Eigen::MatrixXd, Eigen::MatrixXd> DARE(const StateSpace &sys,
     const float tolerance = 1e-5, const uint iterations = 1e5);
 
 
@@ -48,16 +38,15 @@ private:
     Eigen::MatrixXd _Kr;
 
     const StateSpace &_sys;
-    const NoiseModel &_cost;
 
 public:
-    LQR(const StateSpace &sys, const NoiseModel &cost);
+    LQR(const StateSpace &sys);
     inline Eigen::VectorXd calculateGain(const Eigen::VectorXd &x) const {return -_K*x;}
     inline Eigen::VectorXd calculateGain(const Eigen::VectorXd &x, const Eigen::VectorXd &r) const {return _Kr*r - _K*x;}
 
     inline Eigen::VectorXd process(const Eigen::VectorXd &x, const Eigen::VectorXd &u) const {return _sys.process(x, u);}
-    inline Eigen::VectorXd observe(const Eigen::VectorXd &x, const Eigen::VectorXd &u) const {return _sys.observe(x, u);}
-    inline Eigen::VectorXd observe(const Eigen::VectorXd &x) const {return _sys.observe(x);}
+    inline Eigen::VectorXd measure(const Eigen::VectorXd &x, const Eigen::VectorXd &u) const {return _sys.measure(x, u);}
+    inline Eigen::VectorXd measure(const Eigen::VectorXd &x) const {return _sys.measure(x);}
 
 };
 
@@ -70,11 +59,10 @@ private:
     Eigen::MatrixXd _x;
 
     const StateSpace &_sys;
-    const NoiseModel &_noise;
 
 
 public:
-    KalmanFilter(const StateSpace &sys, const NoiseModel &noise, const Eigen::VectorXd &x0, const Eigen::MatrixXd &P0) : _sys(sys), _noise(noise), _x(x0), _P(P0) {};
+    KalmanFilter(const StateSpace &sys, const Eigen::VectorXd &x0, const Eigen::MatrixXd &P0) : _sys(sys), _x(x0), _P(P0) {};
     Eigen::VectorXd predict();
     Eigen::VectorXd predict(const Eigen::VectorXd &u);
     Eigen::VectorXd update(const Eigen::VectorXd &z);

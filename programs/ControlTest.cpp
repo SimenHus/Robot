@@ -6,9 +6,7 @@
 
 int main() {
 
-    
-
-    const float tau = 200;
+    const float tau = 1;
     const float q = 25*25;
     const float r = 5;
     const double T = 1.0;
@@ -20,33 +18,30 @@ int main() {
     std::cout << "Exp test: " << std::endl;
     std::cout << A << std::endl;
     std::cout << A.exp() << std::endl;
-    Eigen::MatrixXd B = Eigen::MatrixXd::Zero(4, 1);
     Eigen::MatrixXd C(2, 4); C << 1, 0, 0, 0,
                                   0, 1, 0, 0;
 
 
     Eigen::MatrixXd G(4, 2); G << 0, 0, 0, 0, -1/tau, 0, 0, -1/tau;
-    Eigen::MatrixXd Q = G * (Eigen::MatrixXd::Identity(2, 2) * q) * G.transpose();
+    Eigen::MatrixXd Q =Eigen::MatrixXd::Identity(2, 2) * q;
     Eigen::MatrixXd R = Eigen::MatrixXd::Identity(2, 2) * r*r;
 
-    LinearSystems::StateSpace sys(A, B, C);
-    LinearSystems::NoiseModel cost(Q, R);
+    LinearSystems::StateSpace sys;
+    sys.A = A; sys.C = C; sys.G = G; sys.Q = Q; sys.R = R;
     
-    const int iterations = 600;
-    // const float pathRadius = 50;
-    // Eigen::VectorXd startPos = Eigen::VectorXd::Zero(2);
+    const int iterations = 100;
+    const float pathRadius = 100;
     Eigen::VectorXd x0(4); x0 << 0, 0, 0, 0;
     Eigen::MatrixXd P0 = Eigen::MatrixXd::Identity(4, 4);
     
-    LinearSystems::NoiseModel discNoise = cost.getDiscrete(T, sys);
     LinearSystems::StateSpace discSys = sys.getDiscrete(T);
-    LinearSystems::KalmanFilter filter(discSys, discNoise, x0, P0);
+    LinearSystems::KalmanFilter filter(discSys, x0, P0);
 
 
     // std::vector<Eigen::VectorXd> groundTruth = Simulation::circularPath(iterations, pathRadius, startPos);
-    std::vector<Eigen::VectorXd> groundTruth = Simulation::circularPath(iterations, 50.0, Eigen::VectorXd::Zero(2));
+    std::vector<Eigen::VectorXd> groundTruth = Simulation::circularPath(iterations, pathRadius, Eigen::VectorXd::Zero(2));
     
-    const float simulatedDisturbance = 5;
+    const float simulatedDisturbance = 3;
     std::cout << "Simulating..." << std::endl;
     std::vector<Eigen::VectorXd> KFResult = Simulation::KalmanFilter(groundTruth, simulatedDisturbance, filter);
     std::cout << "Kalman sim ok" << std::endl;

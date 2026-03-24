@@ -27,7 +27,7 @@ std::vector<Eigen::VectorXd> Simulation::LQR(const std::vector<float> &time, con
     uint interpolationSteps = 100;
 
     std::vector<Eigen::VectorXd> result(time.size());
-    result[0] = controller.observe(x0);
+    result[0] = controller.measure(x0);
 
     Eigen::VectorXd x = x0;
     Eigen::VectorXd r;
@@ -41,7 +41,7 @@ std::vector<Eigen::VectorXd> Simulation::LQR(const std::vector<float> &time, con
             x = x + controller.process(x, u)*dt;
         }
 
-        result[i] = controller.observe(x, u);
+        result[i] = controller.measure(x, u);
     }
 
     return result;
