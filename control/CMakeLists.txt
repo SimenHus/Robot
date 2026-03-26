@@ -1,6 +1,7 @@
 add_library(control STATIC
     src/Linear.cpp
     src/Simulation.cpp
+    src/NonLinear.cpp
 )
 
 find_package(Eigen3 REQUIRED)

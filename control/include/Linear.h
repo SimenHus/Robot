@@ -3,8 +3,12 @@
 #include <Eigen/Dense>
 #include <iostream>
 #include <optional>
+#include <random>
 
 namespace LinearSystems {
+
+Eigen::VectorXd sampleGaussian(const Eigen::MatrixXd &cov, std::mt19937 &gen);
+double gaussianLogLikelihood(const Eigen::VectorXd &x, const Eigen::VectorXd &mean, const Eigen::MatrixXd &cov);
 
 struct StateSpace {
     Eigen::MatrixXd A;
@@ -15,10 +19,8 @@ struct StateSpace {
     Eigen::MatrixXd R;
     Eigen::MatrixXd G;
 
-    Eigen::VectorXd process(const Eigen::VectorXd &x) const;
-    Eigen::VectorXd measure(const Eigen::VectorXd &x) const;
-    Eigen::VectorXd process(const Eigen::VectorXd &x, const Eigen::VectorXd &u) const;
-    Eigen::VectorXd measure(const Eigen::VectorXd &x, const Eigen::VectorXd &u) const;
+    Eigen::VectorXd process(const Eigen::VectorXd &x, const std::optional<Eigen::VectorXd> &u = std::nullopt) const;
+    Eigen::VectorXd measure(const Eigen::VectorXd &x, const std::optional<Eigen::VectorXd> &u = std::nullopt) const;
     // inline void print() const {std::cout << A << std::endl << B << std::endl << C << std::endl << D << std::endl;}
 
     StateSpace getDiscrete(const double sampleTime) const;
@@ -53,25 +55,30 @@ public:
 
 
 
-class KalmanFilter {
-private:
-    Eigen::MatrixXd _P;
-    Eigen::MatrixXd _x;
+namespace KalmanFilter {
+    // Standalone functions used in kalman filtering
+    std::pair<Eigen::VectorXd, Eigen::MatrixXd> predict(const StateSpace &sys, const Eigen::VectorXd &x, const Eigen::MatrixXd &P);
+    std::pair<Eigen::VectorXd, Eigen::MatrixXd> predict(const StateSpace &sys, const Eigen::VectorXd &x, const Eigen::MatrixXd &P, const Eigen::VectorXd &u);
+    std::pair<Eigen::VectorXd, Eigen::MatrixXd> update(const StateSpace &sys, const Eigen::VectorXd &x, const Eigen::MatrixXd &P, const Eigen::VectorXd &z);
+    Eigen::MatrixXd innovationCovariance(const StateSpace &sys, const Eigen::MatrixXd &P);
 
-    const StateSpace &_sys;
+    class Filter { // If kalman filter is needed as object
+    private:
+        Eigen::VectorXd _x;
+        Eigen::MatrixXd _P;
+        const StateSpace &_sys;
+    public:
+        Filter(const StateSpace &sys, const Eigen::VectorXd x0, const Eigen::MatrixXd P0) : _x(x0), _P(P0), _sys(sys) {}
+        inline void predict() {auto [x, P] = KalmanFilter::predict(_sys, _x, _P); _x = x; _P = P;}
+        inline void predict(const Eigen::VectorXd &u) {auto [x, P] = KalmanFilter::predict(_sys, _x, _P, u); _x = x; _P = P;}
+        inline void update(const Eigen::VectorXd &z) {auto [x, P] = KalmanFilter::update(_sys, _x, _P, z); _x = x; _P = P;}
+        inline Eigen::VectorXd getCurrentState() {return _x;}
+        inline Eigen::MatrixXd getCurrentCovariance() {return _P;}
+        inline Eigen::MatrixXd innovationCovariance() {return KalmanFilter::innovationCovariance(_sys, _P);}
+        inline Eigen::VectorXd measure() const {return _sys.measure(_x);}
+    };
 
-
-public:
-    KalmanFilter(const StateSpace &sys, const Eigen::VectorXd &x0, const Eigen::MatrixXd &P0) : _sys(sys), _x(x0), _P(P0) {};
-    Eigen::VectorXd predict();
-    Eigen::VectorXd predict(const Eigen::VectorXd &u);
-    Eigen::VectorXd update(const Eigen::VectorXd &z);
-
-    inline Eigen::VectorXd currentState() const {return _x;}
-};
-
-
-
+}; // Kalman Filter end
 
 
     

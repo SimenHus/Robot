@@ -48,16 +48,18 @@ std::vector<Eigen::VectorXd> Simulation::LQR(const std::vector<float> &time, con
 }
 
 
-std::vector<Eigen::VectorXd> Simulation::KalmanFilter(const std::vector<Eigen::VectorXd> &groundTruth, const float &disturbance, LinearSystems::KalmanFilter &filter) {
+std::vector<Eigen::VectorXd> Simulation::KalmanFilter(const std::vector<Eigen::VectorXd> &groundTruth, const float &disturbance, const LinearSystems::StateSpace &sys, const Eigen::VectorXd &x0, const Eigen::MatrixXd &P0) {
 
     std::vector<Eigen::VectorXd> result(groundTruth.size());
-    result[0] = filter.currentState();
+    result[0] = x0;
 
-    Eigen::VectorXd measurement;
+    Eigen::MatrixXd P_prev = P0;
     for (uint i = 1; i < groundTruth.size(); i++) {
-        measurement = groundTruth[i] + Eigen::VectorXd::Random(groundTruth[i].size()) * disturbance;
-        Eigen::VectorXd prediction = filter.predict();
-        result[i] = filter.update(measurement);
+        Eigen::VectorXd measurement = groundTruth[i] + Eigen::VectorXd::Random(groundTruth[i].size()) * disturbance;
+        auto [x_priori, P_priori] = LinearSystems::KalmanFilter::predict(sys, result[i-1], P_prev);
+        auto [x_posterior, P_posterior] = LinearSystems::KalmanFilter::update(sys, x_priori, P_priori, measurement);
+        result[i] = x_posterior;
+        P_prev = P_posterior;
     }
 
     return result;

@@ -3,26 +3,49 @@
 using namespace LinearSystems;
 
 
-Eigen::VectorXd StateSpace::process(const Eigen::VectorXd &x) const {
-    if (A.size() == 0) {return x;}
-    else {return A*x;}
+Eigen::VectorXd LinearSystems::sampleGaussian(const Eigen::MatrixXd &cov, std::mt19937 &gen) {
+    static std::normal_distribution<double> dist(0.0, 1.0);
+
+    Eigen::VectorXd z(cov.rows());
+    for (int i = 0; i < z.size(); i++)
+        z(i) = dist(gen);
+
+    Eigen::MatrixXd L = cov.llt().matrixL(); // Cholesky
+
+    return L * z;
 }
 
-Eigen::VectorXd StateSpace::process(const Eigen::VectorXd &x, const Eigen::VectorXd &u) const {
+double gaussianLogLikelihood(const Eigen::VectorXd &x, const Eigen::VectorXd &mean, const Eigen::MatrixXd &cov) {
+    int d = x.size();
+    
+    Eigen::MatrixXd cov_inv = cov.inverse().eval();
+    
+    double cov_det = cov.determinant();
+    if (cov_det <= 0) {
+        throw std::runtime_error("Covariance matrix must be positive definite.");
+    }
+
+    Eigen::VectorXd diff = x - mean;
+    double mahalanobis_squared = diff.transpose().eval() * cov_inv * diff;
+
+    double log_likelihood = -d / 2.0 * std::log(2 * M_PI) - 
+                            0.5 * std::log(cov_det) - 
+                            0.5 * mahalanobis_squared;
+
+    return log_likelihood;
+}
+
+
+Eigen::VectorXd StateSpace::process(const Eigen::VectorXd &x, const std::optional<Eigen::VectorXd> &u) const {
     Eigen::MatrixXd Ax = process(x);
-    if (B.size() == 0) {return Ax;}
-    else {return Ax + B*u;}
+    if (u) {return Ax + B*u.value();}
+    else {return Ax;}
 }
 
-Eigen::VectorXd StateSpace::measure(const Eigen::VectorXd &x) const {
-    if (C.size() == 0) {return x;}
-    else {return C*x;}
-}
-
-Eigen::VectorXd StateSpace::measure(const Eigen::VectorXd &x, const Eigen::VectorXd &u) const {
+Eigen::VectorXd StateSpace::measure(const Eigen::VectorXd &x, const std::optional<Eigen::VectorXd> &u) const {
     Eigen::MatrixXd Cx = measure(x);
-    if (D.size() == 0) {return Cx;}
-    else {return Cx + D*u;}
+    if (u) {return Cx + D*u.value();}
+    else {return Cx;}
 }
 
 
@@ -126,26 +149,46 @@ LQR::LQR(const StateSpace &sys)
     _Kr = (sys.C*(sys.B*_K - sys.A).inverse().eval()*sys.B).inverse().eval();
 }
 
-Eigen::VectorXd KalmanFilter::predict() {
-    _x = _sys.process(_x);
-    _P = _sys.A*_P*_sys.A.transpose().eval() + _sys.Q;
-    return _x;
+
+
+std::pair<Eigen::VectorXd, Eigen::MatrixXd> KalmanFilter::predict(const StateSpace &sys, const Eigen::VectorXd &x, const Eigen::MatrixXd &P) {
+    Eigen::VectorXd x_priori = sys.process(x);
+    Eigen::MatrixXd P_priori = sys.A*P*sys.A.transpose().eval() + sys.Q;
+    return {x_priori, P_priori};
 }
-Eigen::VectorXd KalmanFilter::predict(const Eigen::VectorXd &u) {
-    _x = _sys.process(_x), u;
-    _P = _sys.A*_P*_sys.A.transpose().eval() + _sys.Q;
-    return _x;
+std::pair<Eigen::VectorXd, Eigen::MatrixXd> KalmanFilter::predict(const StateSpace &sys, const Eigen::VectorXd &x, const Eigen::MatrixXd &P, const Eigen::VectorXd &u) {
+    Eigen::VectorXd x_priori = sys.process(x, u);
+    Eigen::MatrixXd P_priori = sys.A*P*sys.A.transpose().eval() + sys.Q;
+    return {x_priori, P_priori};
 }
 
+Eigen::MatrixXd KalmanFilter::innovationCovariance(const StateSpace &sys, const Eigen::MatrixXd &P) {
+    Eigen::MatrixXd CT = sys.C.transpose().eval();
+    Eigen::MatrixXd S = sys.C*P*CT + sys.R;
+    return S;
+}
 
-Eigen::VectorXd KalmanFilter::update(const Eigen::VectorXd &z) {
-    Eigen::MatrixXd CT = _sys.C.transpose().eval();
-    Eigen::VectorXd y = z - _sys.C*_x;
-    Eigen::MatrixXd S = _sys.C*_P*CT + _sys.R;
-    Eigen::MatrixXd K = _P * CT * S.ldlt().solve(Eigen::MatrixXd::Identity(S.rows(), S.cols()));
-    Eigen::MatrixXd I = Eigen::MatrixXd::Identity(_P.rows(), _P.cols());
+std::pair<Eigen::VectorXd, Eigen::MatrixXd> KalmanFilter::update(const StateSpace &sys, const Eigen::VectorXd &x, const Eigen::MatrixXd &P, const Eigen::VectorXd &z) {
+    Eigen::MatrixXd CT = sys.C.transpose().eval();
+    Eigen::VectorXd y = z - sys.C*x;
+    Eigen::MatrixXd S = innovationCovariance(sys, P);
+    Eigen::MatrixXd K = P * CT * S.ldlt().solve(Eigen::MatrixXd::Identity(S.rows(), S.cols()));
+    Eigen::MatrixXd I = Eigen::MatrixXd::Identity(P.rows(), P.cols());
 
-    _x = _x + K*y;
-    _P = (I-K*_sys.C)*_P*(I-K*_sys.C).transpose().eval() + K*_sys.R*K.transpose().eval();
-    return _x;
+    Eigen::VectorXd x_posteriori = x + K*y;
+    Eigen::MatrixXd P_posteriori = (I-K*sys.C)*P*(I-K*sys.C).transpose().eval() + K*sys.R*K.transpose().eval();
+    return {x_posteriori, P_posteriori};
+}
+
+void KalmanFilter::Filter::predict() {
+    auto [x, P] = KalmanFilter::predict(_sys, _x, _P);
+    _x = x; _P = P;
+}
+void KalmanFilter::Filter::predict(const Eigen::VectorXd &u) {
+    auto [x, P] = KalmanFilter::predict(_sys, _x, _P, u);
+    _x = x; _P = P;
+}
+void KalmanFilter::Filter::update(const Eigen::VectorXd &z) {
+    auto [x, P] = KalmanFilter::update(_sys, _x, _P, z);
+    _x = x; _P = P;
 }

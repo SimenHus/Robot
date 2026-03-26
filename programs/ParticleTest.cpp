@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include "Linear.h"
+#include "NonLinear.h"
 #include "Simulation.h"
  
 
