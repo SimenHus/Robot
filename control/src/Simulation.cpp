@@ -34,7 +34,7 @@ std::vector<Eigen::VectorXd> Simulation::LQR(const std::vector<float> &time, con
     Eigen::VectorXd u;
 
     float dt = (time[1] - time[0]) / interpolationSteps;
-    for (uint i = 1; i < time.size(); i++) {
+    for (uint i = 1; i < time.size(); ++i) {
         r = reference[i-1];
         for (uint j = 0; j < interpolationSteps; j++) {
             u = controller.calculateGain(x, r);
@@ -54,7 +54,7 @@ std::vector<Eigen::VectorXd> Simulation::KalmanFilter(const std::vector<Eigen::V
     result[0] = x0;
 
     Eigen::MatrixXd P_prev = P0;
-    for (uint i = 1; i < groundTruth.size(); i++) {
+    for (uint i = 1; i < groundTruth.size(); ++i) {
         Eigen::VectorXd measurement = groundTruth[i] + Eigen::VectorXd::Random(groundTruth[i].size()) * disturbance;
         auto [x_priori, P_priori] = LinearSystems::KalmanFilter::predict(sys, result[i-1], P_prev);
         auto [x_posterior, P_posterior] = LinearSystems::KalmanFilter::update(sys, x_priori, P_priori, measurement);

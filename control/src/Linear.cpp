@@ -7,7 +7,7 @@ Eigen::VectorXd LinearSystems::sampleGaussian(const Eigen::MatrixXd &cov, std::m
     static std::normal_distribution<double> dist(0.0, 1.0);
 
     Eigen::VectorXd z(cov.rows());
-    for (int i = 0; i < z.size(); i++)
+    for (int i = 0; i < z.size(); ++i)
         z(i) = dist(gen);
 
     Eigen::MatrixXd L = cov.llt().matrixL(); // Cholesky
@@ -15,15 +15,12 @@ Eigen::VectorXd LinearSystems::sampleGaussian(const Eigen::MatrixXd &cov, std::m
     return L * z;
 }
 
-double gaussianLogLikelihood(const Eigen::VectorXd &x, const Eigen::VectorXd &mean, const Eigen::MatrixXd &cov) {
+double LinearSystems::gaussianLogLikelihood(const Eigen::VectorXd &x, const Eigen::VectorXd &mean, const Eigen::MatrixXd &cov) {
     int d = x.size();
     
-    Eigen::MatrixXd cov_inv = cov.inverse().eval();
-    
-    double cov_det = cov.determinant();
-    if (cov_det <= 0) {
-        throw std::runtime_error("Covariance matrix must be positive definite.");
-    }
+    Eigen::LDLT<Eigen::MatrixXd> ldlt(cov); // Use cholesky decomposition
+    Eigen::MatrixXd cov_inv = ldlt.solve(Eigen::MatrixXd::Identity(d, d));
+    double cov_det = ldlt.vectorD().prod();
 
     Eigen::VectorXd diff = x - mean;
     double mahalanobis_squared = diff.transpose().eval() * cov_inv * diff;
@@ -37,13 +34,13 @@ double gaussianLogLikelihood(const Eigen::VectorXd &x, const Eigen::VectorXd &me
 
 
 Eigen::VectorXd StateSpace::process(const Eigen::VectorXd &x, const std::optional<Eigen::VectorXd> &u) const {
-    Eigen::MatrixXd Ax = process(x);
+    Eigen::MatrixXd Ax = A*x;
     if (u) {return Ax + B*u.value();}
     else {return Ax;}
 }
 
 Eigen::VectorXd StateSpace::measure(const Eigen::VectorXd &x, const std::optional<Eigen::VectorXd> &u) const {
-    Eigen::MatrixXd Cx = measure(x);
+    Eigen::MatrixXd Cx = C*x;
     if (u) {return Cx + D*u.value();}
     else {return Cx;}
 }
@@ -100,7 +97,7 @@ std::pair<Eigen::MatrixXd, Eigen::MatrixXd> LinearSystems::CARE(const StateSpace
     Eigen::MatrixXd BR_invBT = sys.B*R_inv*BT;
     
     Eigen::MatrixXd P_dot;
-    for (uint i = 0; i < iterations; i++) {
+    for (uint i = 0; i < iterations; ++i) {
         P_dot = AT*P + P*sys.A - P*sys.B*R_inv*BT*P + sys.Q;
         P = P + P_dot*dt;
 
@@ -126,7 +123,7 @@ std::pair<Eigen::MatrixXd, Eigen::MatrixXd> LinearSystems::DARE(const StateSpace
     Eigen::MatrixXd BR_invBT = sys.B*R_inv*BT;
     
     Eigen::MatrixXd P_prev = P;
-    for (uint i = 0; i < iterations; i++) {
+    for (uint i = 0; i < iterations; ++i) {
         P = AT*P_prev*sys.A - AT*P_prev*sys.B*(sys.R + BT*P_prev*sys.B).inverse().eval()*BT*P_prev*sys.A + sys.Q;
 
         if (std::abs(P_prev.norm() - P.norm()) <= tolerance) {
@@ -150,13 +147,7 @@ LQR::LQR(const StateSpace &sys)
 }
 
 
-
-std::pair<Eigen::VectorXd, Eigen::MatrixXd> KalmanFilter::predict(const StateSpace &sys, const Eigen::VectorXd &x, const Eigen::MatrixXd &P) {
-    Eigen::VectorXd x_priori = sys.process(x);
-    Eigen::MatrixXd P_priori = sys.A*P*sys.A.transpose().eval() + sys.Q;
-    return {x_priori, P_priori};
-}
-std::pair<Eigen::VectorXd, Eigen::MatrixXd> KalmanFilter::predict(const StateSpace &sys, const Eigen::VectorXd &x, const Eigen::MatrixXd &P, const Eigen::VectorXd &u) {
+std::pair<Eigen::VectorXd, Eigen::MatrixXd> KalmanFilter::predict(const StateSpace &sys, const Eigen::VectorXd &x, const Eigen::MatrixXd &P, const std::optional<Eigen::VectorXd> &u) {
     Eigen::VectorXd x_priori = sys.process(x, u);
     Eigen::MatrixXd P_priori = sys.A*P*sys.A.transpose().eval() + sys.Q;
     return {x_priori, P_priori};
@@ -178,17 +169,4 @@ std::pair<Eigen::VectorXd, Eigen::MatrixXd> KalmanFilter::update(const StateSpac
     Eigen::VectorXd x_posteriori = x + K*y;
     Eigen::MatrixXd P_posteriori = (I-K*sys.C)*P*(I-K*sys.C).transpose().eval() + K*sys.R*K.transpose().eval();
     return {x_posteriori, P_posteriori};
-}
-
-void KalmanFilter::Filter::predict() {
-    auto [x, P] = KalmanFilter::predict(_sys, _x, _P);
-    _x = x; _P = P;
-}
-void KalmanFilter::Filter::predict(const Eigen::VectorXd &u) {
-    auto [x, P] = KalmanFilter::predict(_sys, _x, _P, u);
-    _x = x; _P = P;
-}
-void KalmanFilter::Filter::update(const Eigen::VectorXd &z) {
-    auto [x, P] = KalmanFilter::update(_sys, _x, _P, z);
-    _x = x; _P = P;
 }

@@ -4,9 +4,26 @@
 using namespace NonLinearSystems;
 
 
+Eigen::VectorXd ParticleFilter::estimateMean(const std::vector<ParticleFilter::Particle> &particles) {
+    int dim = particles[0].x.size();
+    Eigen::VectorXd mean = Eigen::VectorXd::Zero(dim);
+
+    double sum_w = 0.0;
+
+    for (const auto &p : particles) {
+        double w = std::exp(p.w);
+        mean += w * p.x;
+        sum_w += w;
+    }
+
+    return mean / sum_w;
+}
+
+
+
 std::vector<ParticleFilter::Particle> ParticleFilter::initialize(const ParticleFilter::Particle &baseParticle, const uint particleCount) {
-    std::vector<ParticleFilter::Particle> particles(particleCount);
-    for (int i = 0; i < particleCount; i++) {
+    std::vector<ParticleFilter::Particle> particles; particles.reserve(particleCount);
+    for (int i = 0; i < particleCount; ++i) {
         Eigen::VectorXd x_noised = baseParticle.x + LinearSystems::sampleGaussian(baseParticle.sys.processNoise, baseParticle.gen);
         ParticleFilter::Particle newParticle = baseParticle;
         newParticle.x = x_noised;
@@ -47,20 +64,16 @@ std::vector<int> ParticleFilter::systematicResample(const std::vector<double> &w
     int i = 0;
 
     // 5. for j ← 1:N
-    for (int j = 0; j < N; ++j)
-    {
+    for (int j = 0; j < N; ++j) {
         // u_j ← (j-1)/N + noise
         double u = j * (1.0 / N) + noise;
 
         // while u_j > cumweights[i]
-        while (u > cumweights[i])
-        {
+        while (u > cumweights[i]) {
             i++;
             // safety (shouldn't happen if weights normalized)
-            if (i >= N) i = N - 1;
+            if (i >= N) {i = N - 1;}
         }
-
-        // indicesout[j] ← i
         indices_out[j] = i;
     }
 
@@ -70,37 +83,36 @@ std::vector<int> ParticleFilter::systematicResample(const std::vector<double> &w
 
 void ParticleFilter::resample(std::vector<ParticleFilter::Particle> &particles) {
     const int n = particles.size();
-    std::vector<Particle> newParticles(n);
-    std::vector<double> weights(n);
-
+    std::vector<Particle> newParticles; newParticles.reserve(n);
+    std::vector<double> weights; weights.reserve(n);
     for (auto &p : particles) {
-        weights.push_back(p.w);
+        weights.push_back(std::exp(p.w));
     }
-    std::vector<int> indices = ParticleFilter::systematicResample(weights, particles[0].gen);
 
-    for (int idx : indices)
-    {
+    std::vector<int> indices = ParticleFilter::systematicResample(weights, particles[0].gen);
+    for (int idx : indices) {
+        // std::cout << "Index: " << idx << std::endl;
         newParticles.push_back(particles[idx]);
         newParticles.back().w = - std::log(n); // reset weights
     }
-
     particles = std::move(newParticles);
 }
 
 
 void ParticleFilter::update(std::vector<ParticleFilter::Particle> &particles, const Eigen::VectorXd &z) {
-    double maxLogWeight = std::numeric_limits<double>::infinity(); // Keep track of largest weight
+    double maxLogWeight = -std::numeric_limits<double>::infinity(); // Keep track of largest weight
+
     // Update particle weights and kalman filters
     for (auto &p : particles) {
-        Eigen::VectorXd particlePrediction = p.sys.measurementModel(p.x, std::nullopt);
+        Eigen::VectorXd measurementPrediction = p.sys.measurementModel(p.x, std::nullopt);
         if (p.kf) {
             Eigen::MatrixXd innovationCovariance = p.kf.value().innovationCovariance();
-            p.kf.value().update(z - particlePrediction);
+            p.kf.value().update(z - measurementPrediction);
             Eigen::VectorXd linearPrediction = p.kf.value().measure();
-            p.w += LinearSystems::gaussianLogLikelihood(z, particlePrediction + linearPrediction, innovationCovariance);
+            p.w += LinearSystems::gaussianLogLikelihood(z, measurementPrediction + linearPrediction, innovationCovariance);
         }
         else {
-            p.w += LinearSystems::gaussianLogLikelihood(z, particlePrediction, p.sys.measurementNoise);
+            p.w += LinearSystems::gaussianLogLikelihood(z, measurementPrediction, p.sys.measurementNoise);
         }
         maxLogWeight = std::max(maxLogWeight, p.w); // Check if current weight is highest
     }
@@ -117,7 +129,6 @@ void ParticleFilter::update(std::vector<ParticleFilter::Particle> &particles, co
         double w = std::exp(p.w);
         sumSquares += w*w;
     }
-
     double effectiveParticles = 1 / sumSquares;
 
     // Resample if needed

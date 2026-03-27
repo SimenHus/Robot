@@ -28,14 +28,19 @@ struct StateSpace {
             double w;
             const StateSpace &sys;
             std::mt19937 &gen;
-            std::optional<LinearSystems::KalmanFilter::Filter> kf = std::nullopt;
+            std::optional<LinearSystems::KalmanFilter::Filter> kf;
+            Particle(const Eigen::VectorXd &x_, double w_, const StateSpace &sys_, std::mt19937 &gen_, std::optional<LinearSystems::KalmanFilter::Filter> kf_ = std::nullopt)
+            : x(x_), w(w_), sys(sys_), gen(gen_), kf(kf_) {}
         };
 
         std::vector<Particle> initialize(const Particle &particleBase, const uint particleCount);
         void predict(std::vector<Particle> &particles);
         void update(std::vector<Particle> &particles, const Eigen::VectorXd &z);
         void resample(std::vector<Particle> &particles);
-        std::vector<int> systematicResample(std::vector<double> &weights, std::mt19937 &gen);
+        std::vector<int> systematicResample(const std::vector<double> &weights, std::mt19937 &gen);
+        Eigen::VectorXd estimateMean(const std::vector<Particle> &particles);
+
+        
 
 
     }; // Particle Filter
